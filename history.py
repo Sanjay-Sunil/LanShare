@@ -62,6 +62,24 @@ class HistoryManager:
         conn.close()
         return rows
 
+    def get_known_peers(self, limit=10):
+        conn = self._connect()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT peer_name, peer_ip, MAX(timestamp) AS last_used
+            FROM transfers
+            WHERE direction = 'SENT'
+            GROUP BY peer_ip
+            ORDER BY last_used DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        return [{"name": name, "ip": ip} for name, ip, _ in rows]
+
     def clear_history(self):
         conn = self._connect()
         cursor = conn.cursor()

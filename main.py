@@ -1,4 +1,5 @@
 import ipaddress
+import os
 
 import config
 import discovery
@@ -32,17 +33,64 @@ def is_valid_ip(ip):
         return False
 
 
+def expand_file_paths(raw_paths):
+    expanded = []
+
+    for path in raw_paths:
+        if os.path.isdir(path):
+            for root, _dirs, files in os.walk(path):
+                for filename in files:
+                    expanded.append(os.path.join(root, filename))
+        else:
+            expanded.append(path)
+
+    return expanded
+
+
 def read_file_list():
-    raw = input("Enter file paths separated by commas: ").strip()
+    raw = input("Enter file or folder paths separated by commas: ").strip()
 
     if not raw:
         print("[ERROR] No files entered.")
         return []
 
-    return [path.strip() for path in raw.split(",") if path.strip()]
+    raw_paths = [path.strip() for path in raw.split(",") if path.strip()]
+    return expand_file_paths(raw_paths)
 
 
-def handle_discover_and_send(file_sender):
+def select_known_peer(history):
+    peers = history.get_known_peers()
+
+    if not peers:
+        return None, None
+
+    print()
+    print("Known receivers:")
+    for index, peer in enumerate(peers, start=1):
+        print(f"{index}. {peer['name']:<12} {peer['ip']}")
+    print(f"{len(peers) + 1}. Enter a new IP address")
+    print()
+
+    choice = input("Select receiver: ").strip()
+
+    if not choice.isdigit():
+        print("[ERROR] Invalid selection.")
+        return None, "invalid"
+
+    choice = int(choice)
+
+    if choice == len(peers) + 1:
+        return None, None
+
+    if choice < 1 or choice > len(peers):
+        print("[ERROR] Invalid selection.")
+        return None, "invalid"
+
+    peer = peers[choice - 1]
+    return peer["ip"], peer["name"]
+
+
+def handle_discover_and_send(file_sender, history):
     print("Searching for receivers...")
     receivers = discovery.discover_receivers()
 
@@ -50,7 +98,7 @@ def handle_discover_and_send(file_sender):
         print("No receivers found on the network.")
         choice = input("Enter IP manually? (y/n): ").strip().lower()
         if choice == "y":
-            handle_manual_send(file_sender)
+            handle_manual_send(file_sender, history)
         return
 
     print()
@@ -70,7 +118,7 @@ def handle_discover_and_send(file_sender):
     choice = int(choice)
 
     if choice == len(receivers) + 1:
-        handle_manual_send(file_sender)
+        handle_manual_send(file_sender, history)
         return
 
     if choice < 1 or choice > len(receivers):
@@ -80,11 +128,17 @@ def handle_discover_and_send(file_sender):
     receiver = receivers[choice - 1]
     files = read_file_list()
     if files:
-        file_sender.send_files(receiver["ip"], receiver["port"], files)
+        file_sender.send_files(receiver["ip"], receiver["port"], files, peer_name=receiver["name"])
 
 
-def handle_manual_send(file_sender):
-    ip = input("Receiver IP: ").strip()
+def handle_manual_send(file_sender, history):
+    ip, peer_name = select_known_peer(history)
+
+    if ip is None:
+        if peer_name == "invalid":
+            return
+        ip = input("Receiver IP: ").strip()
+        peer_name = None
 
     if not is_valid_ip(ip):
         print(f"[ERROR] Invalid IP address: {ip}")
@@ -92,7 +146,7 @@ def handle_manual_send(file_sender):
 
     files = read_file_list()
     if files:
-        file_sender.send_files(ip, config.TCP_PORT, files)
+        file_sender.send_files(ip, config.TCP_PORT, files, peer_name=peer_name)
 
 
 def main():
@@ -113,9 +167,9 @@ def main():
         choice = input("Enter choice: ").strip()
 
         if choice == "1":
-            handle_discover_and_send(file_sender)
+            handle_discover_and_send(file_sender, history)
         elif choice == "2":
-            handle_manual_send(file_sender)
+            handle_manual_send(file_sender, history)
         elif choice == "3":
             history.show_history()
         elif choice == "4":

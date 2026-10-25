@@ -10,7 +10,7 @@ class FileSender:
         self.history = history
         self.device_name = device_name
 
-    def send_files(self, host, port, file_paths):
+    def send_files(self, host, port, file_paths, peer_name=None):
         valid_paths = [path for path in file_paths if os.path.isfile(path)]
         missing_paths = [path for path in file_paths if not os.path.isfile(path)]
 
@@ -28,7 +28,7 @@ class FileSender:
             print(f"[ERROR] Unable to connect to {host}: {error}")
             for path in valid_paths:
                 self.history.add_transfer(
-                    host, host, os.path.basename(path), 0, "SENT", "FAILED"
+                    peer_name or host, host, os.path.basename(path), 0, "SENT", "FAILED"
                 )
             return
 
@@ -40,14 +40,14 @@ class FileSender:
             total = len(valid_paths)
             for index, path in enumerate(valid_paths, start=1):
                 print(f"[{index}/{total}] Sending {os.path.basename(path)}")
-                self._send_one_file(client_socket, host, path)
+                self._send_one_file(client_socket, host, path, peer_name)
 
             print(f"{total}/{total} files transferred.")
 
         finally:
             client_socket.close()
 
-    def _send_one_file(self, client_socket, host, path):
+    def _send_one_file(self, client_socket, host, path, peer_name=None):
         filename = os.path.basename(path)
         file_size = os.path.getsize(path)
 
@@ -80,4 +80,4 @@ class FileSender:
             print(f"      Transfer failed: {error}")
             status = "FAILED"
 
-        self.history.add_transfer(host, host, filename, file_size, "SENT", status)
+        self.history.add_transfer(peer_name or host, host, filename, file_size, "SENT", status)
